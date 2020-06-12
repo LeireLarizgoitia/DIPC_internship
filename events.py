@@ -50,6 +50,8 @@ Rn4 = (5.2064)**4
 "Energy range of the incoming neutrino in MeV (more or less)"
 Enu_min = 0.0
 Enu_max = m_muon/2 #~52.8MeV
+Enu_mu = (m_pion**2 - m_muon**2) / (2*m_pion) #~29.8MeV
+
 
 "Recoil energy range of Xenon in KeV"
 T_min= 0.9
@@ -96,25 +98,28 @@ def flux(E,alpha):  #Fluxes following a continuous distribution. Normalized
 int_mu =  np.zeros((nsteps+1),float)
 int_antimu =  np.zeros((nsteps+1),float)
 int_e = np.zeros((nsteps+1),float)
-EE= np.zeros((nsteps+1),float)
+EE_antimu= np.zeros((nsteps+1),float)
+EE_e= np.zeros((nsteps+1),float)
 
 def differential_events(T,a):
     """Integral Bounds"""
     Emin = np.sqrt(T*M*c**2/e /2 *1E-9) #1/2 * (T + np.sqrt(T**2 + 2*T*M*c**2/e *1E-3)) * 1E-3 #MeV
     if (a==0):
-        return (cross_section(T, (m_pion**2 - m_muon**2) / (2*m_pion) )) #~29.8MeV
+        if (T<2*(Enu_mu)**2*e*1E9/M/c**2):
+            return (cross_section(T,Enu_mu)) #~29.8MeV
+        else:
+            return 0.0
     if (a==1):
         for i in range (0,nsteps+1):
-            EE[i] = Emin + (Enu_max - Emin)/nsteps * i
-            int_antimu[i] = (cross_section(T,EE[i]) * flux(EE[i],1))
-        return (np.trapz(int_antimu, x=EE))
+            EE_antimu[i] = Emin + (Enu_max - Emin)/nsteps * i
+            int_antimu[i] = (cross_section(T,EE_antimu[i]) * flux(EE_antimu[i],1))
+        return (np.trapz(int_antimu, x=EE_antimu))
     if (a==2):
         for i in range (0,nsteps+1):
-            EE[i] = Emin + (Enu_max - Emin)/nsteps * i
-            int_e[i] = (cross_section(T,EE[i]) * flux(EE[i],2))
-        return (np.trapz(int_e, x=EE))
+            EE_e[i] = Emin + (Enu_max - Emin)/nsteps * i
+            int_e[i] = (cross_section(T,EE_e[i]) * flux(EE_e[i],2))
+        return (np.trapz(int_e, x=EE_e))
 
-    #return (cross_section(T, (m_pion**2 - m_muon**2) / (2*m_pion) ) + np.trapz(int_antimu, x=EE) + np.trapz(int_e, x=EE)) *1e39
 
 def variance(T):
     return sigma0 * np.sqrt(T/T_thres)
@@ -177,13 +182,29 @@ def Plot_flux():
     #plt.savefig("Plot neutrino flux.png", format='png', dpi=1200,bbox_inches = 'tight')
     plt.show()
 
+def Plot_thresold():
+    T_thres_max = Enu_mu
+    T_thres_min = 0.9
+    T_thresold = []
+    TT = []
+    dNdT = []
+    events = []
+    for j in range(0,nsteps+1):
+        T_thresold.append(T_thres_min + (T_thres_max - T_thres_min)/nsteps * j )
+        for i in range(0,nsteps+1):
+            TT.append(T_thresold[j] + (T_max - T_thresold[j])/nsteps * i)
+            dNdT.append(1e38*(differential_events(TT[i],0) + differential_events(TT[i],1)+ differential_events(TT[i],2)))
+        events.append(np.trapz(dNdT, x=TT))
+        TT.clear()
+        dNdT.clear()
 
-def best_fit(x,bins):
-    # best fit of data
-    (mu, sigma) = norm.fit(x)
-    # add a 'best fit' line
-    y = norm.pdf(bins, mu, sigma)
-    return plt.plot(bins, y, 'r--', linewidth=2)
+    plt.yscale('log')
+    plt.plot(T_thresold, events, label='Xe', color='orange')
+    plt.xlabel(r'$T_{thresold}(keV)$')
+    plt.ylabel(r'$CE\nu NS $ nuclear recoils')
+    plt.legend()
+    #plt.savefig("Plot thresold change till Enu_mu.png", format='png', dpi=1200,bbox_inches = 'tight')
+    plt.show()
 
 #%%
 "MAIN PART"
@@ -193,26 +214,17 @@ def best_fit(x,bins):
 T = []
 T_rad = []
 
-T_real = []
 T_real_mu = []
 T_real_antimu = []
 T_real_e = []
 
-dNdT =  []
 dNdT_mu =  []
 dNdT_antimu =  []
 dNdT_e =  []
 
-T_resolution = []
 T_resolution_mu = []
-T_resolution_anti = []
+T_resolution_antimu = []
 T_resolution_e = []
-
-"Detector Thresold"
-T_thres_max = T_max
-T_thres_min = 0.9
-T_thresold = []
-events = []
 
 "Neutrino flux plot"
 #Plot_flux()
@@ -220,36 +232,11 @@ events = []
 #Plot_ff(xx,ff1,ff,ff2)
 "Cross section plot"
 #Plot_cross_section()
+"Detector Thresold plot"
+#Plot_thresold()
 
-"Thresold analysis"
-for j in range(0,nsteps+1):
-    T_thresold.append(T_thres_min + (T_thres_max - T_thres_min)/nsteps * j )
-    for i in range(0,nsteps+1):
-        T.append(T_thresold[j] + (T_max - T_thresold[j])/nsteps * i)
-        dNdT_mu.append(differential_events(T[i],0))
-        dNdT_antimu.append(differential_events(T[i],1))
-        dNdT_e.append(differential_events(T[i],2))
-        dNdT.append((dNdT_mu[i] + dNdT_antimu[i] + dNdT_e[i]))
 
-    events.append(np.trapz(dNdT, x=T))
-    T.clear()
-    dNdT.clear()
-    dNdT_mu.clear()
-    dNdT_antimu.clear()
-    dNdT_e.clear()
-
-print(T_thresold)
-
-#plt.xscale('log')
-plt.yscale('log')
-plt.plot(T_thresold, events, label='n')
-plt.xlabel(r'$T_{thresold}(keV)$')
-plt.ylabel(r'$ $')
-plt.legend()
-#plt.show()
-"""
-
-"Events analisys"
+"Events analisys, thresold at 0.9KeV and QF of 10%"
 for i in range(0,nsteps+1):
     T.append(T_min + (T_max - T_min)/nsteps * i)
     dNdT_mu.append(differential_events(T_min + (T_max - T_min)/nsteps * i,0))
@@ -257,89 +244,83 @@ for i in range(0,nsteps+1):
     dNdT_e.append(differential_events(T_min + (T_max - T_min)/nsteps * i,2))
 
 
-#dNdT = dNdT_mu + dNdT_antimu + dNdT_e
-
-# the histogram of the ANTIMUON NEUTRINO data
-plt.plot(T, dNdT_mu, label='i')
-
-plt.xlabel(r'$T (keV)$')
-plt.ylabel(r'$ $')
-plt.legend()
-#plt.show()
-
-for i in range(int(1E5)):
+nn=int(1E5)
+for i in range(nn):
     T_random = random.uniform(T_min,T_max)
     T_rad.append(T_random)
 
     dNdT_random_mu = differential_events(T_random,0)
     dNdT_random_antimu = differential_events(T_random,1)
     dNdT_random_e = differential_events(T_random,2)
-    #dNdT_random = dNdT_random_mu + dNdT_random_antimu + dNdT_random_e
 
-    r = random.uniform(dNdT[0],dNdT[nsteps])
     r_mu = random.uniform(dNdT_mu[0],dNdT_mu[nsteps])
     r_antimu = random.uniform(dNdT_antimu[0],dNdT_antimu[nsteps])
     r_e = random.uniform(dNdT_e[0],dNdT_e[nsteps])
 
     if (dNdT_random_mu > r_mu):
-        T_real_mu.append(T_random)
+        if (T_random*0.1>= 0.9):
+            T_real_mu.append(T_random*0.1)
     if (dNdT_random_antimu > r_antimu):
-        T_real_antimu.append(T_random)
+        if (T_random*0.1>= 0.9):
+            T_real_antimu.append(T_random*0.1)
     if (dNdT_random_e > r_e):
-        T_real_e.append(T_random)
-    #if (dNdT_random > r):
-    #    T_real.append(T_random)
-
-#for t in (T_real):
-#    T_resolution.append(random.gauss(t, sigma0 * np.sqrt(t/T_thres)))
+        if (T_random*0.1>= 0.9):
+            T_real_e.append(T_random*0.1)
 
 for t in (T_real_mu):
     T_resolution_mu.append(random.gauss(t, sigma0 * np.sqrt(t/T_thres)))
 
 for t in (T_real_antimu):
-    T_resolution_anti.append(random.gauss(t, sigma0 * np.sqrt(t/T_thres)))
+    T_resolution_antimu.append(random.gauss(t, sigma0 * np.sqrt(t/T_thres)))
 
 for t in (T_real_e):
     T_resolution_e.append(random.gauss(t, sigma0 * np.sqrt(t/T_thres)))
 
-
 "PLOT MAKING"
 
 "Events plot"
+Tsum1 = T_resolution_antimu + T_resolution_e
+Tsum2 = T_resolution_antimu + T_resolution_e + T_resolution_mu
 
 # the histogram of all the data
-n, bins, patches = plt.hist(T_resolution_mu, 25, density=1, label=r'$\nu_{\mu}$', color='olivedrab')
-n, bins, patches = plt.hist(T_resolution_anti, 25, density=1, label= r'$\bar{\nu}_{\mu}$', color='yellowgreen')
-n, bins, patches = plt.hist(T_resolution_e, 25, density=1, label=r'$\nu_{e}$', color='lightgreen')
+n, bins, patches = plt.hist(Tsum2, 22, density=1, label=r'$\nu_{\mu}$', color='olivedrab') #all flavours
+n, bins, patches = plt.hist(Tsum1, 22, density=1, label= r'$\nu_{e}$', color='yellowgreen') #only muon antineutrino and electron neutrino
+n, bins, patches = plt.hist(T_resolution_antimu, 22, density=1, label=r'$\bar{\nu}_{\mu}$', color='lightgreen') #only muon antineutrino
 
 plt.xlabel(r'$T (keV)$')
 plt.ylabel(r'$ $')
 plt.legend()
-#plt.show()
+#plt.savefig("Events"+str(nn)+"bins22+QF.png", format='png', dpi=1200,bbox_inches = 'tight')
+plt.show()
 
 # the histogram of the MUON NEUTRINO data
-n, bins, patches = plt.hist(T_resolution_mu, 25, density=1, label=r'$\nu_{\mu}$', color='olivedrab')
+n, bins, patches = plt.hist(T_resolution_mu, 22, density=1, label=r'$\nu_{\mu}$', color='cornflowerblue')
 
 plt.xlabel(r'$T (keV)$')
 plt.ylabel(r'$ $')
 plt.legend()
-#plt.show()
-
-# the histogram of the ANTIMUON NEUTRINO data
-n, bins, patches = plt.hist(T_resolution_anti, 25, density=1, label= r'$\bar{\nu}_{\mu}$', color='yellowgreen')
-
-plt.xlabel(r'$T (keV)$')
-plt.ylabel(r'$ $')
-plt.legend()
-#plt.show()
+plt.show()
 
 # the histogram of the ELECTRON NEUTRINO data
-n, bins, patches = plt.hist(T_resolution_e, 25, density=1, label=r'$\nu_{e}$', color='lightgreen')
+n, bins, patches = plt.hist(T_resolution_e, 22, density=1, label=r'$\nu_{e}$', color='black')
 
 plt.xlabel(r'$T (keV)$')
 plt.ylabel(r'$ $')
 plt.legend()
-#plt.show()
+plt.show()
 
+# the histogram of the MUON ANITNEUTRINO data
+n, bins, patches = plt.hist(T_resolution_antimu, 22, density=1, label=r'$\bar{\nu}_{\mu}$', color='orange')
 
-"""
+plt.xlabel(r'$T (keV)$')
+plt.ylabel(r'$ $')
+plt.legend()
+plt.show()
+
+# the histogram of the MUON ANITNEUTRINO data
+n, bins, patches = plt.hist(T_resolution_antimu + T_resolution_e, 22, density=1, label=r'$\bar{\nu}_{\mu} + \nu_{e}$', color='yellowgreen')
+
+plt.xlabel(r'$T (keV)$')
+plt.ylabel(r'$ $')
+plt.legend()
+plt.show()
